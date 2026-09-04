@@ -1,8 +1,10 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
-from streamlit_webrtc import webrtc_streamer
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 
 from vision.processor import VisionProcessor
+from vision.state import vision_state
 
 
 st.set_page_config(
@@ -11,50 +13,47 @@ st.set_page_config(
     layout="centered"
 )
 
-
-# --------------------------------------------------
-# TITLE
-# --------------------------------------------------
-
 st.title("👁️ AI Vision Assistant")
-
-st.caption(
-    "Your AI-powered extra pair of eyes"
-)
+st.caption("Your AI-powered extra pair of eyes")
 
 
-# --------------------------------------------------
+# ==================================================
 # SETTINGS
-# --------------------------------------------------
+# ==================================================
 
 st.sidebar.header("⚙️ Settings")
 
-
 confidence = st.sidebar.slider(
     "Detection Confidence",
-
     min_value=0.20,
-
     max_value=0.90,
-
     value=0.45,
-
     step=0.05
 )
 
 
-# --------------------------------------------------
-# LIVE CAMERA
-# --------------------------------------------------
+# ==================================================
+# CAMERA
+# ==================================================
 
 st.subheader("📷 Live Camera")
 
+RTC_CONFIGURATION = RTCConfiguration({
+    "iceServers": [
+        {
+            "urls": [
+                "stun:stun.l.google.com:19302"
+            ]
+        }
+    ]
+})
 
 ctx = webrtc_streamer(
-
     key="vision-assistant",
 
     video_processor_factory=VisionProcessor,
+
+    rtc_configuration=RTC_CONFIGURATION,
 
     media_stream_constraints={
         "video": True,
@@ -65,312 +64,208 @@ ctx = webrtc_streamer(
 )
 
 
-# --------------------------------------------------
-# ASSISTANT
-# --------------------------------------------------
-
-st.subheader("🧠 Assistant")
-
-
 if ctx.video_processor:
-
-    # Update confidence
-
     ctx.video_processor.confidence = confidence
 
-    message = (
-        ctx.video_processor.current_message
-    )
 
-else:
+# ==================================================
+# CURRENT STATE
+# ==================================================
 
-    message = "Start the camera to begin."
+message, detections, version = vision_state.get()
 
 
-# Display current message
+# ==================================================
+# AI ASSISTANT
+# ==================================================
 
-st.info(
+st.subheader("🧠 AI Assistant")
+
+st.success(
     "🔊 " + message.capitalize()
 )
 
 
-# --------------------------------------------------
-# AUTOMATIC SPEECH
-# --------------------------------------------------
+# ==================================================
+# VOICE
+# ==================================================
 
 st.subheader("🔊 Voice Assistant")
 
+components.html(
+    f"""
+    <div style="
+        font-family: Arial, sans-serif;
+        padding: 10px;
+        text-align: center;
+    ">
 
-# Streamlit custom component
-# sends the message to browser JavaScript.
+        <button
+            id="voiceButton"
+            style="
+                padding: 12px 20px;
+                font-size: 16px;
+                border-radius: 10px;
+                border: none;
+                cursor: pointer;
+            "
+        >
+            🔊 Enable Voice
+        </button>
 
-try:
+        <p id="voiceStatus">
+            Voice disabled
+        </p>
 
-    speech_component = st.components.v2.component(
+        <p style="font-size:13px;color:gray;">
+            Tap Enable Voice once to allow browser speech.
+        </p>
 
-        name="vision_voice_assistant",
+    </div>
 
-        html="""
-        <div>
-            <button id="voiceButton">
-                🔊 Enable Voice
-            </button>
+    <script>
 
-            <p id="voiceStatus">
-                Voice is disabled
-            </p>
-        </div>
-        """,
+        const button =
+            document.getElementById("voiceButton");
 
-        css="""
-
-        button {
-
-            padding: 10px 18px;
-
-            border-radius: 10px;
-
-            border: none;
-
-            cursor: pointer;
-
-            font-size: 16px;
-
-        }
-
-        p {
-
-            font-size: 14px;
-
-            opacity: 0.7;
-
-        }
-
-        """,
-
-        js="""
-
-        export default function(component) {
-
-            const {
-                data,
-                parentElement
-            } = component;
+        const status =
+            document.getElementById("voiceStatus");
 
 
-            const button =
-                parentElement.querySelector(
-                    "#voiceButton"
-                );
+        let enabled = false;
 
 
-            const status =
-                parentElement.querySelector(
-                    "#voiceStatus"
-                );
+        button.addEventListener(
+            "click",
+            function() {{
 
+                enabled = true;
 
-            let voiceEnabled = false;
-
-            let lastMessage = "";
-
-
-            // Enable voice after user interaction
-
-            button.onclick = () => {
-
-                voiceEnabled = true;
-
-                status.textContent =
+                status.innerText =
                     "Voice enabled ✓";
-
-
-                // Unlock speech synthesis
-
-                const test =
-                    new SpeechSynthesisUtterance(
-                        "Voice assistant enabled."
-                    );
-
-                window.speechSynthesis.speak(
-                    test
-                );
-
-            };
-
-
-            // Speak new messages
-
-            const message =
-                data?.message || "";
-
-
-            if (
-                voiceEnabled &&
-                message &&
-                message !== lastMessage
-            ) {
-
-                lastMessage = message;
-
-
-                window.speechSynthesis.cancel();
 
 
                 const speech =
                     new SpeechSynthesisUtterance(
-                        message
+                        "Voice assistant enabled."
                     );
 
 
-                speech.rate = 1.0;
+                speech.lang = "en-US";
 
-                speech.pitch = 1.0;
+                speech.rate = 0.95;
 
-                speech.volume = 1.0;
+                speech.volume = 1;
 
+
+                window.speechSynthesis.cancel();
 
                 window.speechSynthesis.speak(
                     speech
                 );
 
-            }
+            }}
+        );
 
 
-            return () => {};
-
-        }
-
-        """
-
-    )
+        const message =
+            {message!r};
 
 
-    speech_component(
+        if (
+            enabled &&
+            message
+        ) {{
 
-        data={
-            "message": message
-        },
-
-        key="voice-component"
-
-    )
-
-
-except Exception:
-
-    st.warning(
-        "Voice component requires "
-        "a recent Streamlit version."
-    )
+            const speech =
+                new SpeechSynthesisUtterance(
+                    message
+                );
 
 
-# --------------------------------------------------
-# DETECTED OBJECTS
-# --------------------------------------------------
+            speech.lang = "en-US";
 
-if ctx.video_processor:
+            speech.rate = 0.95;
 
-    detections = (
-        ctx.video_processor.detections
-    )
-
-    if detections:
-
-        st.subheader(
-            "🔎 Detected Objects"
-        )
+            speech.volume = 1;
 
 
-        for detection in detections:
+            window.speechSynthesis.cancel();
 
-            name = detection["name"]
+            window.speechSynthesis.speak(
+                speech
+            );
 
-            confidence_value = (
-                detection["confidence"]
-            )
+        }}
 
-            position = (
-                detection["position"]
-            )
-
-            distance = (
-                detection["distance"]
-            )
-
-
-            if distance is not None:
-
-                distance_text = (
-                    f"{distance} m"
-                )
-
-            else:
-
-                distance_text = (
-                    "Unknown"
-                )
-
-
-            st.write(
-                f"### {name.title()}"
-            )
-
-            st.write(
-                f"Confidence: "
-                f"{confidence_value:.0%}"
-            )
-
-            st.write(
-                f"Position: {position}"
-            )
-
-            st.write(
-                f"Distance: {distance_text}"
-            )
-
-            st.divider()
-
-
-# --------------------------------------------------
-# HOW IT WORKS
-# --------------------------------------------------
-
-st.subheader(
-    "ℹ️ How it works"
+    </script>
+    """,
+    height=180
 )
 
+
+# ==================================================
+# OBJECTS
+# ==================================================
+
+if detections:
+
+    st.subheader("🔎 Detected Objects")
+
+    for detection in detections:
+
+        st.write(
+            f"### {detection['name'].title()}"
+        )
+
+        st.write(
+            f"Confidence: "
+            f"{detection['confidence']:.0%}"
+        )
+
+        st.write(
+            f"Position: "
+            f"{detection['position']}"
+        )
+
+        if detection["distance"] is not None:
+
+            st.write(
+                f"Distance: "
+                f"{detection['distance']} m"
+            )
+
+        else:
+
+            st.write(
+                "Distance: Unknown"
+            )
+
+        st.divider()
+
+
+# ==================================================
+# PIPELINE
+# ==================================================
+
+st.subheader("ℹ️ How it works")
 
 st.write(
     """
-📷 Camera
-
-↓
-
-🤖 YOLO Object Detection
-
-↓
-
-📍 Position Detection
-
-↓
-
-📏 Distance Estimation
-
-↓
-
+📷 Live Camera
+→
+🤖 YOLO
+→
+📍 Position
+→
+📏 Distance
+→
 🧠 AI Assistant
-
-↓
-
-🔊 Voice Output
+→
+🔊 Voice
 """
 )
 
-
-# --------------------------------------------------
-# SAFETY WARNING
-# --------------------------------------------------
 
 st.warning(
     "⚠️ Distance estimates are approximate. "

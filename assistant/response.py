@@ -6,8 +6,6 @@ def create_response(detection):
 
     distance = detection["distance"]
 
-    # Unknown distance
-
     if distance is None:
 
         if position == "front":
@@ -15,8 +13,6 @@ def create_response(detection):
             return f"{name} in front of you."
 
         return f"{name} on your {position}."
-
-    # Convert distance into natural language
 
     if distance < 0.5:
 
@@ -28,9 +24,9 @@ def create_response(detection):
 
     else:
 
-        distance_text = f"{distance} meters away"
-
-    # Front
+        distance_text = (
+            f"{distance} meters away"
+        )
 
     if position == "front":
 
@@ -38,8 +34,6 @@ def create_response(detection):
             f"{name} in front of you, "
             f"{distance_text}."
         )
-
-    # Left / right
 
     return (
         f"{name} on your {position}, "

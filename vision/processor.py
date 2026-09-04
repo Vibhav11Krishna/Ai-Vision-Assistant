@@ -6,6 +6,7 @@ from streamlit_webrtc import VideoProcessorBase
 from vision.detector import ObjectDetector
 from vision.position import get_position
 from vision.distance import estimate_distance
+from vision.state import vision_state
 from assistant.response import create_response
 
 
@@ -17,13 +18,7 @@ class VisionProcessor(VideoProcessorBase):
 
         self.confidence = 0.45
 
-        self.current_message = "Looking..."
-
-        self.detections = []
-
     def recv(self, frame):
-
-        # Convert WebRTC frame to OpenCV image
 
         image = frame.to_ndarray(
             format="bgr24"
@@ -31,7 +26,9 @@ class VisionProcessor(VideoProcessorBase):
 
         height, width = image.shape[:2]
 
-        # YOLO detection
+        # -----------------------------
+        # YOLO DETECTION
+        # -----------------------------
 
         detections = self.detector.detect(
             image,
@@ -40,7 +37,9 @@ class VisionProcessor(VideoProcessorBase):
 
         processed = []
 
-        # Process every detected object
+        # -----------------------------
+        # PROCESS OBJECTS
+        # -----------------------------
 
         for detection in detections:
 
@@ -50,27 +49,23 @@ class VisionProcessor(VideoProcessorBase):
 
             x1, y1, x2, y2 = detection["box"]
 
-            # Object width in pixels
-
             pixel_width = max(
                 1,
                 x2 - x1
             )
 
-            # Object center
-
             center_x = (
                 x1 + x2
             ) / 2
 
-            # Left / right / front
+            # Position
 
             position = get_position(
                 center_x,
                 width
             )
 
-            # Approximate distance
+            # Distance
 
             distance = estimate_distance(
                 name,
@@ -99,17 +94,26 @@ class VisionProcessor(VideoProcessorBase):
                 object_data
             )
 
-            # Draw bounding box
+            # -----------------------------
+            # DRAW BOX
+            # -----------------------------
 
             cv2.rectangle(
+
                 image,
+
                 (x1, y1),
+
                 (x2, y2),
+
                 (0, 255, 0),
+
                 2
             )
 
-            # Label
+            # -----------------------------
+            # LABEL
+            # -----------------------------
 
             if distance is not None:
 
@@ -129,46 +133,97 @@ class VisionProcessor(VideoProcessorBase):
                 )
 
             cv2.putText(
+
                 image,
+
                 label,
+
                 (
                     x1,
-                    max(y1 - 10, 20)
+                    max(y1 - 10, 25)
                 ),
+
                 cv2.FONT_HERSHEY_SIMPLEX,
+
                 0.55,
+
                 (0, 255, 0),
+
                 2
             )
 
-        # Save processed detections
-
-        self.detections = processed
-
-        # Generate assistant message
+        # -----------------------------
+        # CREATE MESSAGE
+        # -----------------------------
 
         if processed:
 
-            # Highest confidence detection
-
             best = max(
+
                 processed,
-                key=lambda x: x["confidence"]
+
+                key=lambda x:
+                x["confidence"]
             )
 
-            self.current_message = create_response(
+            message = create_response(
                 best
             )
 
         else:
 
-            self.current_message = (
+            message = (
                 "I don't see any objects."
             )
 
-        # Return processed frame
+        # -----------------------------
+        # UPDATE SHARED STATE
+        # -----------------------------
+
+        vision_state.update(
+
+            message,
+
+            processed
+        )
+
+        # -----------------------------
+        # SHOW MESSAGE ON VIDEO
+        # -----------------------------
+
+        cv2.rectangle(
+
+            image,
+
+            (0, 0),
+
+            (width, 60),
+
+            (0, 0, 0),
+
+            -1
+        )
+
+        cv2.putText(
+
+            image,
+
+            message,
+
+            (15, 38),
+
+            cv2.FONT_HERSHEY_SIMPLEX,
+
+            0.65,
+
+            (255, 255, 255),
+
+            2
+        )
 
         return av.VideoFrame.from_ndarray(
+
             image,
+
             format="bgr24"
         )
